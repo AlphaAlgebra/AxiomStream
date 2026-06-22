@@ -74,7 +74,7 @@ An independent system daemon that pulls live, real-world telemetry from the publ
 ```text
 AxiomStream/
 ├── assets/
-│   └── audit_preview.png         # Image preview of the generated compliance report
+│   └── Axiom_photo.png           # Image preview of the generated compliance report
 ├── src/
 │   ├── engine/
 │   │   ├── __init__.py
@@ -117,4 +117,3 @@ python3 -m src.infrastructure.orchestrator
 # Spin up Live FedRAMP Compliance Auditor
 python3 -m src.infrastructure.bot_audit
 ```
-
