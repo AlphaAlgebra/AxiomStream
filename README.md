@@ -63,12 +63,6 @@ Models system state properties dynamically as abstract algebraic matrices. The e
 
 ### 3. Automated Compliance Auditing Bot (FedRAMP Focus)
 An independent system daemon that pulls live, real-world telemetry from the public federal marketplace data registry, evaluates authorization baselines, and compiles an executive-ready compliance asset log locally.
-
-#### Real-Time Audit PDF Artifact Generation Preview:
-<img ![Uploading Axiom_photo.png…]()
-
-
-
 ---
 
 ## Repository Layout
