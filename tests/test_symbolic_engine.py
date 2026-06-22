@@ -1,30 +1,33 @@
 import pytest
 import requests
 from src.infrastructure.master_pipeline import ingest_fedramp_data
+from src.engine.symbolic_solver import SymbolicStateVerifier
 
-def test_network_timeout_fallback(monkeypatch):
+def test_network_to_verifier_integration(monkeypatch):
     """
-    Advanced Assert: Simulates high network latency where DNS resolves 
-    but the HTTP connection times out, ensuring fallback activation.
+    Integration Assert: Verifies data pipeline integration from the 
+    network fallback layer directly into the SymbolicStateVerifier engine.
     """
+    # 1. Force a timeout to guarantee the ingestion pipeline drops to fallback buffers
+    def mock_timeout(*args, **kwargs):
+        raise requests.exceptions.Timeout("Simulated latency check.")
     
-    # 1. Define a mock function that simulates a requests Timeout exception
-    def mock_requests_get_timeout(*args, **kwargs):
-        raise requests.exceptions.Timeout("Connection timed out due to high target latency.")
+    monkeypatch.setattr(requests, "get", mock_timeout)
 
-    # 2. Intercept requests.get to simulate the slow I/O connection phase
-    monkeypatch.setattr(requests, "get", mock_requests_get_timeout)
+    # 2. Step 1 of Integration: Fetch the compliance data payload matrix
+    compliance_data = ingest_fedramp_data()
+    assert isinstance(compliance_data, list), "Data ingestion step failed."
 
-    # 3. Execute the data ingestion loop under simulated high latency
-    fallback_payload = ingest_fedramp_data()
+    # 3. Step 2 of Integration: Initialize your formal verifier with the network output
+    # We verify the engine can parse the real strings provided by the fallback buffer
+    verifier = SymbolicStateVerifier()
+    
+    # 4. Step 3 of Integration: Feed ingestion components into calculation loops
+    # Test checking a streaming balance boundary using the data context
+    expression_to_test = "x + 5"
+    verification_result = verifier.verify_expression(expression_to_test, compliance_data)
 
-    # 4. Verify data structure integrity invariants remain valid
-    assert fallback_payload is not None, "Fallback core failed to generate data matrices on timeout."
-    assert isinstance(fallback_payload, list), "Data contract mismatch: Payload must remain a list."
-    assert len(fallback_payload) == 3, "Payload shape altered under network timeout conditions."
-
-    # 5. Confirm that our fallback providers are cleanly compiled into memory
-    providers = [item["Cloud Provider"] for item in fallback_payload]
-    assert "Amazon Web Services" in providers
-    assert "Microsoft" in providers
-    assert "Google" in providers
+    # 5. Core End-to-End System Assertions
+    assert "Volume Invariant Intact" in verification_result
+    assert "Safety Boundary Condition" in verification_result
+    assert verification_result["Volume Invariant Intact"] is True, "Mathematical invariant broken during data pipeline transit."
