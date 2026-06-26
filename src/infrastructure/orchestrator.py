@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor
 from src.engine.symbolic_solver import SymbolicStateVerifier
 from prometheus_client import start_http_server, Counter, Histogram
 
+# --- ENTERPRISE ARTIFACT: DEFINE PROMETHEUS METRIC TELEMETRY VECTOR TRACKERS ---
 TRANSACTION_COUNT = Counter('axiom_transactions_total', 'Total processed transaction stream payloads', ['status'])
 CACHE_LOOKUP_COUNT = Counter('axiom_cache_lookups_total', 'Total Redis memory cache lookups', ['result'])
 LATENCY_HISTOGRAM = Histogram('axiom_transaction_latency_seconds', 'Sustained validation loop latency metrics')
@@ -47,8 +48,10 @@ async def process_stream_transaction(stream_event: str):
     loop = asyncio.get_running_loop()
     pool = get_compute_pool()
     redis = await get_redis_client()
+    
     cache_key = f"axiom_verify:{stream_event}"
     
+    # Track latency across the entire validation block lifecycle
     with LATENCY_HISTOGRAM.time():
         if redis:
             try:
@@ -65,10 +68,14 @@ async def process_stream_transaction(stream_event: str):
         try:
             print(f"📥 [KAFKA-CONSUMER] Cache miss. Processing partition record payload: '{stream_event}'")
             CACHE_LOOKUP_COUNT.labels(result='miss').inc()
+            
             result = await loop.run_in_executor(pool, _cpu_bound_symbolic_task, stream_event)
+            
             print(f"  |-- Invariant Intact: {result.get('volume_invariant_holds')}\n")
+            
             if redis and result:
                 asyncio.create_task(redis.setex(cache_key, 3600, json.dumps(result)))
+                
             TRANSACTION_COUNT.labels(status='success_compute').inc()
             return result
         except Exception as e:
@@ -93,8 +100,10 @@ async def mock_kafka_stream_consumer(kafka_topic_buffer: asyncio.Queue):
 
 async def main():
     """System entry point for real-time distributed stream cluster testing."""
+    # Start the Prometheus HTTP metrics server on port 8000 inside the container environment
     print("📊 [MONITORING] Initializing native Prometheus exporter listener pool on port 8000...")
     start_http_server(8000)
+    
     print(f"⚡ Launching Ultra-Low Latency uvloop Engine across {os.cpu_count()} Worker Processes...")
     kafka_topic_buffer = asyncio.Queue(maxsize=100)
     producer_task = asyncio.create_task(mock_kafka_stream_producer(kafka_topic_buffer))
@@ -110,6 +119,7 @@ if __name__ == "__main__":
         uvloop.install()
     except ImportError:
         pass
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
