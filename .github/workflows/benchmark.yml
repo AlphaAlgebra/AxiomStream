@@ -1,0 +1,55 @@
+name: AxiomStream Automated Performance Benchmarking Engine
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  performance-benchmark:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code Layers
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust
+
+      - name: Execute Headless Locust Stress-Test Benchmark
+        run: |
+          echo "🚀 Initializing low-latency uvloop compute core stress test..."
+          # Run headless load benchmark simulating 50 concurrent users spawning at 5 users/sec for 20 seconds
+          locust -f locustfile.py --headless -u 50 -r 5 --run-time 20s --csv=benchmark_report
+
+      - name: Generate and Format Architectural Efficiency Log
+        run: |
+          echo "=== 📊 REAL-TIME CORE INGESTION EFFICIENCY METRICS ===" > benchmark_efficiency.log
+          echo "Timestamp: $(date -u)" >> benchmark_efficiency.log
+          echo "--------------------------------------------------------" >> benchmark_efficiency.log
+          
+          # Extract and parse total summary parameters from Locust's output CSV matrix
+          if [ -f benchmark_report_stats.csv ]; then
+            echo "Target Method | Total Requests | Total Failures | Median Latency (ms) | Average Latency (ms) | Max Latency (ms) | Avg Throughput (RPS)" >> benchmark_efficiency.log
+            tail -n 1 benchmark_report_stats.csv | awk -F',' '{print $1 " | " $2 " | " $3 " | " $4 " | " $5 " | " $6 " | " $10}' >> benchmark_efficiency.log
+          else
+            echo "⚠️ Performance CSV reporting metrics compilation failed." >> benchmark_efficiency.log
+          fi
+          
+          cat benchmark_efficiency.log
+
+      - name: Commit Historic Telemetry Efficiency Logs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "perf(telemetry): update automated performance efficiency matrix records"
+          file_pattern: "benchmark_efficiency.log"
