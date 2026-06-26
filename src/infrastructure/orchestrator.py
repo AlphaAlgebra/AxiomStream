@@ -6,6 +6,7 @@ import json
 from concurrent.futures import ProcessPoolExecutor
 from src.engine.symbolic_solver import SymbolicStateVerifier
 
+# Global thread-safe process execution pool and client caching connection contexts
 _PROCESS_POOL: ProcessPoolExecutor = None
 _REDIS_CLIENT = None
 
@@ -23,12 +24,14 @@ async def get_redis_client():
     if _REDIS_CLIENT is None:
         try:
             import redis.asyncio as aioredis
+            # Reads system environment parameters or falls back to secure localhost configurations
             redis_host = os.getenv("REDIS_HOST", "localhost")
             _REDIS_CLIENT = aioredis.Redis(host=redis_host, port=6379, decode_responses=True)
+            # Short ping execution to verify circuit integrity
             await asyncio.wait_for(_REDIS_CLIENT.ping(), timeout=1.0)
             print("🚀 [CACHE-INFRA] Asynchronous Redis connection pool established successfully.")
         except Exception:
-            print("⚠️ [CACHE-INFRA] Redis host unreachable. Operating engine under fallback parameters.")
+            print("⚠️ [CACHE-INFRA] Redis host unreachable. Operating engine under fallback cache-miss parameters.")
             _REDIS_CLIENT = False
     return _REDIS_CLIENT
 
@@ -38,11 +41,15 @@ def _cpu_bound_symbolic_task(expression: str) -> dict:
     return verifier.verify_transaction_safety(expression)
 
 async def process_stream_transaction(stream_event: str):
-    """Asynchronous transaction processor equipped with sub-millisecond Redis caching mechanics."""
+    """
+    Asynchronous transaction processor equipped with sub-millisecond Redis caching mechanics.
+    Bypasses CPU processing pools completely on hit events.
+    """
     loop = asyncio.get_running_loop()
     pool = get_compute_pool()
     redis = await get_redis_client()
     
+    # --- STRATEGIC COMPONENT: IN-MEMORY CACHE-LOOKUP LAYER ---
     cache_key = f"axiom_verify:{stream_event}"
     if redis:
         try:
@@ -56,6 +63,7 @@ async def process_stream_transaction(stream_event: str):
         except Exception as e:
             print(f"⚠️ Cache read anomaly ignored: {str(e)}")
 
+    # --- PROCESS POOL COMPUTATION (CACHE MISS FALLBACK BLOCK) ---
     try:
         print(f"📥 [KAFKA-CONSUMER] Cache miss. Processing partition record payload: '{stream_event}'")
         result = await loop.run_in_executor(pool, _cpu_bound_symbolic_task, stream_event)
@@ -64,6 +72,7 @@ async def process_stream_transaction(stream_event: str):
         print(f"  |-- Hazard Alert: {result.get('overdraft_risk_detected')}")
         print(f"  |-- Solver Boundary Condition: {result.get('boundary_hazards')}\n")
         
+        # Write back data to Redis cache asynchronous to keep the pipeline hot (TTL: 1 Hour)
         if redis and result:
             asyncio.create_task(redis.setex(cache_key, 3600, json.dumps(result)))
             
