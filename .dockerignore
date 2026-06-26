@@ -1,0 +1,23 @@
+# Ignore local virtual environment directories
+venv/
+.venv/
+env/
+
+# Ignore compiled python bytecode fragments
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Ignore local testing caches and telemetry outputs
+.pytest_cache/
+.locust/
+*.log
+fedramp_realtime_audit.pdf
+
+# Ignore system configuration metadata
+.git/
+.gitignore
+.github/
+Makefile
+upwork_profile.txt
