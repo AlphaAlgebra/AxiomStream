@@ -1,47 +1,72 @@
 import asyncio
-import concurrent.futures
-import time
+import os
+import sys
+from concurrent.futures import ProcessPoolExecutor
 from src.engine.symbolic_solver import SymbolicStateVerifier
 
-def compute_worker(transaction_expr: str) -> dict:
+# Global process pool initializer to reuse worker resources efficiently
+_PROCESS_POOL: ProcessPoolExecutor = None
+
+def get_compute_pool() -> ProcessPoolExecutor:
+    """Initializes or returns a cached multi-core execution process pool layout."""
+    global _PROCESS_POOL
+    if _PROCESS_POOL is None:
+        # Dynamically allocate exactly 1 worker per physical/logical processor core
+        max_workers = os.cpu_count() or 2
+        _PROCESS_POOL = ProcessPoolExecutor(max_workers=max_workers)
+    return _PROCESS_POOL
+
+def _cpu_bound_symbolic_task(expression: str) -> dict:
     """
-    Heavy CPU-bound mathematical verification executed inside 
-    the detached Multiprocessing worker pool.
+    Isolated computational worker callback. Runs strictly inside an independent OS process 
+    to completely bypass the Python Global Interpreter Lock (GIL).
     """
     verifier = SymbolicStateVerifier()
-    return verifier.verify_transaction_safety(transaction_expr)
+    return verifier.verify_transaction_safety(expression)
 
-async def stream_orchestrator():
+async def stream_transaction_orchestrator(stream_event: str):
     """
-    High-throughput async event loop orchestrating incoming transaction streams.
+    Asynchronous event lifecycle handler. Offloads heavy equations without blocking
+    the non-blocking network reception loop.
     """
-    # Create a Process Pool Executor to maximize multi-core hardware scaling
-    pool = concurrent.futures.ProcessPoolExecutor()
     loop = asyncio.get_running_loop()
-
-    # Simulated incoming event stream from a Kafka topic
-    mock_event_stream = ["x + 5", "150", "y * 2", "balance_a - 200", "50"]
+    pool = get_compute_pool()
     
-    print(f"🚀 AxiomStream Orchestrator starting high-throughput processing...")
-    start_time = time.time()
+    try:
+        # Pass the task to the compute pool while cleanly awaiting the result asynchronously
+        print(f"📥 Ingested stream transaction payload expression: '{stream_event}'")
+        result = await loop.run_in_executor(pool, _cpu_bound_symbolic_task, stream_event)
+        
+        print(f" |-- Volume Invariant Holds: {result.get('volume_invariant_holds')}")
+        print(f" |-- State Risk Alert Status: {result.get('overdraft_risk_detected')}")
+        print(f" |-- Safety Boundary Rules: {result.get('boundary_hazards')}\n")
+        return result
+    except Exception as e:
+        print(f"❌ Structural crash inside computational worker node: {str(e)}", file=sys.stderr)
+        return None
 
-    # Schedule tasks asynchronously across the worker pool
-    tasks = []
-    for expr in mock_event_stream:
-        # Offload the execution to a background process worker thread
-        task = loop.run_in_executor(pool, compute_worker, expr)
-        tasks.append((expr, task))
-
-    # Ingest and display verification outputs as they complete
-    for expr, task in tasks:
-        result = await task
-        print(f"\n📥 Ingested Stream Expression: '{expr}'")
-        print(f"   |-- Volume Invariant Intact: {result['volume_invariant_holds']}")
-        print(f"   |-- State Risk Alert: {result['overdraft_risk_detected']}")
-        print(f"   |-- Safety Boundary Condition: {result['boundary_hazards']}")
-
-    pool.shutdown()
-    print(f"\n✨ Streaming verification phase completed in {time.time() - start_time:.4f} seconds.")
+async def main():
+    """Simulated real-time streaming batch execution pipeline entrypoint."""
+    print(f"⚡ Launching Async Orchestrator Framework via {os.cpu_count()} CPU Process Workers...")
+    
+    # Simulating a high-velocity ingress stream batch
+    mock_event_stream = [
+        "x + 5",
+        "150",
+        "y * 2",
+        "balance_a - 200",
+        "50"
+    ]
+    
+    # Process the incoming streams concurrently using high-performance task scheduling
+    tasks = [asyncio.create_task(stream_transaction_orchestrator(event)) for event in mock_event_stream]
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    asyncio.run(stream_orchestrator())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n🛑 Execution pool termination sequence completed.")
+    finally:
+        if _PROCESS_POOL:
+            _PROCESS_POOL.shutdown(wait=True)
