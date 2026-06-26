@@ -1,88 +1,87 @@
+import asyncio
 import os
-import requests
-from datetime import datetime
+import sys
+import aiohttp
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-class FedRampAuditBot:
-    def __init__(self):
-        # Reliable data stream source for public sector cloud authorization baselines
-        self.data_url = "https://githubusercontent.com"
-        self.output_pdf = "fedramp_realtime_audit.pdf"
+# Configuration layer
+FEDRAMP_REGISTRY_URL = "https://githubusercontent.com" 
+OUTPUT_PDF_PATH = "fedramp_realtime_audit.pdf"
 
-    def fetch_live_market_data(self) -> dict:
-        """Downloads live Cloud Service Provider (CSP) operational data from GSA records."""
-        print("🌐 Ingesting live FedRAMP authorization data streams...")
-        try:
-            response = requests.get(self.data_url, timeout=15)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            print(f"⚠️ Primary stream error: {e}. Injecting baseline mock data fallback...")
-            return {
-                "products": [
-                    {"provider_name": "Amazon Web Services", "service_name": "AWS GovCloud", "designation": "FedRAMP High"},
-                    {"provider_name": "Microsoft", "service_name": "Azure Government", "designation": "FedRAMP High"},
-                    {"provider_name": "Google", "service_name": "Google Workspace Government", "designation": "FedRAMP Moderate"}
-                ]
-            }
-
-    def generate_pdf_report(self, data: dict):
-        """Compiles downloaded infrastructure telemetry into a clean PDF document."""
-        print(f"📄 Compiling telemetry into '{self.output_pdf}'...")
-        doc = SimpleDocTemplate(self.output_pdf, pagesize=letter)
-        styles = getSampleStyleSheet()
-        story = []
-
-        title_style = ParagraphStyle(
-            'AuditTitle', parent=styles['Heading1'],
-            textColor=colors.HexColor('#0F172A'), fontSize=20, spaceAfter=12
-        )
-        meta_style = ParagraphStyle(
-            'AuditMeta', parent=styles['Normal'],
-            textColor=colors.HexColor('#64748B'), fontSize=10, spaceAfter=20
-        )
-
-        story.append(Paragraph("AxiomStream Live Compliance Audit Log", title_style))
-        story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Target: FedRAMP Marketplace", meta_style))
-        story.append(Spacer(1, 12))
-
-        table_content = [["Cloud Provider", "Service Identity", "Authorization Level"]]
-        
-        # Safe extraction for both API styles or structural backups
-        products = data.get("products", data.get("data", []))
-        if not products and isinstance(data, list):
-            products = data
+def _build_pdf_worker(data_matrix: list) -> str:
+    """
+    CPU-heavy PDF construction callback. Run inside an isolated execution thread context 
+    to prevent blocking the async loop.
+    """
+    doc = SimpleDocTemplate(OUTPUT_PDF_PATH, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom architectural style configurations
+    title_style = ParagraphStyle('DocTitle', parent=styles['Heading1'], fontSize=22, spaceAfter=12, textColor=colors.HexColor('#1A365D'))
+    body_style = ParagraphStyle('DocBody', parent=styles['BodyText'], fontSize=10, leading=14)
+    
+    story.append(Paragraph("AxiomStream Automated Security Compliance Audit Report", title_style))
+    story.append(Paragraph(f"<b>Target Baseline:</b> FedRAMP Authorization Matrix Registry Context Data", body_style))
+    story.append(Spacer(1, 12))
+    
+    # Build structural tabular layout arrays
+    table_data = [["Index Offset", "Identified Dependency Component Requirement / Package Profile"]]
+    for idx, line in enumerate(data_matrix[:25]): # Cap reporting frame for speed optimizations
+        if line.strip():
+            table_data.append([str(idx + 1), Paragraph(line.strip(), body_style)])
             
-        # Slice the first 10 for a clear overview matrix layout
-        for item in products[:10]:
-            table_content.append([
-                str(item.get("provider_name", item.get("vendor_name", "N/A"))),
-                str(item.get("service_name", item.get("product_name", "N/A"))),
-                str(item.get("designation", item.get("service_model", "Authorized")))
-            ])
+    audit_table = Table(table_data, colWidths=[80, 440])
+    audit_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2B6CB0')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#F7FAFC')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+    
+    story.append(audit_table)
+    doc.build(story)
+    return OUTPUT_PDF_PATH
 
-        audit_table = Table(table_content, colWidths=[180, 180, 140])
-        audit_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E293B')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8FAFC')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ]))
+async def fetch_compliance_telemetry(session: aiohttp.ClientSession) -> list:
+    """Performs ultra-low latency, non-blocking asynchronous HTTP network stream reads."""
+    try:
+        print(f"🌐 [INGESTION] Fetching live compliance vectors from upstream endpoint registry...")
+        async with session.get(FEDRAMP_REGISTRY_URL, timeout=10) as response:
+            if response.status != 200:
+                print(f"⚠️ Unexpected upstream connection response token status: {response.status}")
+                return []
+            raw_text = await response.text()
+            return raw_text.split("\n")
+    except Exception as e:
+        print(f"❌ Network collection pipeline blocked by connection fault: {str(e)}", file=sys.stderr)
+        return []
+
+async def run_compliance_audit_cycle():
+    """Main non-blocking execution lifecycle loop wrapper."""
+    async with aiohttp.ClientSession() as session:
+        # Step 1: Low-latency async data ingestion
+        telemetry_lines = await fetch_compliance_telemetry(session)
         
-        story.append(audit_table)
-        doc.build(story)
-        print(f"✨ Audit completely wrapped. Target exported to: {os.path.abspath(self.output_pdf)}")
+        if not telemetry_lines:
+            print("🛑 Ingested compliance data metrics are empty. Aborting report render pass.")
+            return
+
+        print(f"📥 [PARSING] Successfully ingested {len(telemetry_lines)} compliance nodes.")
+        
+        # Step 2: Offload CPU-heavy ReportLab PDF compilation safely to a background worker thread
+        print(f"🖨️ [COMPILING] Generating formal audit report via background worker threading pools...")
+        loop = asyncio.get_running_loop()
+        pdf_path = await loop.run_in_executor(None, _build_pdf_worker, telemetry_lines)
+        
+        print(f"✨ [SUCCESS] Compliance asset generated securely at target footprint path: '{pdf_path}'\n")
 
 if __name__ == "__main__":
-    bot = FedRampAuditBot()
-    payload = bot.fetch_live_market_data()
-    bot.generate_pdf_report(payload)
-
+    print("🤖 Launching High-Throughput Compliance Auditing Daemon Core...")
+    asyncio.run(run_compliance_audit_cycle())
