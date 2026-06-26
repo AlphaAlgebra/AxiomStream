@@ -23,6 +23,10 @@ COPY tests/ ./tests/
 COPY locustfile.py .
 COPY requirements.txt .
 
+# --- EXPOSE THE NATIVE PROMETHEUS SCRAPE ENDPOINT PORT ---
+EXPOSE 8000
+EXPOSE 6379
+
 RUN cat << 'INNER_EOF' > entrypoint.sh
 #!/bin/sh
 echo "🗄️ Starting localized in-memory Redis server background instance..."
