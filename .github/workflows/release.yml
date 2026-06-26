@@ -1,0 +1,27 @@
+name: AxiomStream Automated Production Release Engine
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger workflow strictly when pushing version tags (e.g., v1.0.0)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code Layers
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Production Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AxiomStream Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
