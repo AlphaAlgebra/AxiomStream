@@ -1,0 +1,9 @@
+# Treat automation utilities and dependency manifests as repository documentation
+*.sh linguist-documentation
+*.py linguist-documentation
+requirements.txt linguist-documentation
+
+# Mark build systems as vendored background resources
+CMakeLists.txt linguist-vendored
+*.cmake linguist-vendored
+build/* linguist-vendored

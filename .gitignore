@@ -1,6 +1,37 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran/C++ modules
+*.mod
+*.smod
+
+# Build directories
+build/
+bin/
+dist/
+
+# Python virtual environments & cache
+.venv/
 venv/
-upwork_profile.txt
-upwork_portfolio_card.txt
-milestone_pitch.txt
-cover_letter.txt
-github_seo_manifest.txt
+__pycache__/
+*.pyc
+
+# IDEs and editors
+.vscode/
+.idea/
+.DS_Store
